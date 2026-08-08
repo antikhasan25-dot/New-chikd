@@ -12,6 +12,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    # ১. আনজিপ ও ফাইল স্ট্রাকচার ঠিক করা
     - name: Unzip and Move Files
       run: |
         unzip -o *.zip || true
@@ -22,16 +23,71 @@ jobs:
         touch .env
         touch .env.example
 
+    # ২. অটোমেটিক আসল প্যাকেজ নাম খুঁজে নিয়ে google-services.json জেনারেট করা
+    - name: Auto Generate google-services.json
+      run: |
+        # ১. build.gradle / build.gradle.kts থেকে applicationId/namespace বের করা
+        PKG=$(grep -Eo 'applicationId[[:space:]=]+["'\''][^"'\'']+["'\'']' app/build.gradle app/build.gradle.kts 2>/dev/null | grep -oE '["'\''][^"'\'']+["'\'']' | tr -d '"'\'')
+        if [ -z "$PKG" ]; then
+          PKG=$(grep -Eo 'namespace[[:space:]=]+["'\''][^"'\'']+["'\'']' app/build.gradle app/build.gradle.kts 2>/dev/null | grep -oE '["'\''][^"'\'']+["'\'']' | tr -d '"'\'')
+        fi
+        if [ -z "$PKG" ]; then
+          PKG=$(grep -Eo 'package=["'\''][^"'\'']+["'\'']' app/src/main/AndroidManifest.xml 2>/dev/null | grep -oE '["'\''][^"'\'']+["'\'']' | tr -d '"'\'')
+        fi
+        if [ -z "$PKG" ]; then
+          PKG="com.aistudio.childguardian.cg"
+        fi
+
+        echo "----------------------------------------------"
+        echo "Detected True Package Name: $PKG"
+        echo "----------------------------------------------"
+
+        mkdir -p app/
+        cat <<EOF > app/google-services.json
+        {
+          "project_info": {
+            "project_number": "123456789012",
+            "project_id": "child-guardian-app",
+            "storage_bucket": "child-guardian-app.appspot.com"
+          },
+          "client": [
+            {
+              "client_info": {
+                "mobilesdk_app_id": "1:123456789012:android:1234567890123456",
+                "android_client_info": {
+                  "package_name": "$PKG"
+                }
+              },
+              "oauth_client": [],
+              "api_key": [
+                {
+                  "current_key": "AIzaSyDummyKeyForBuildVerificationOnly"
+                }
+              ],
+              "services": {
+                "appinvite_service": {
+                  "other_platform_oauth_client": []
+                }
+              }
+            }
+          ],
+          "configuration_version": "1"
+        }
+        EOF
+
+    # ৩. জাভা ২১ সেটআপ
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
         java-version: '21'
         distribution: 'temurin'
 
+    # ৪. কাস্টম Keystore তৈরি
     - name: Generate Debug Keystore
       run: |
         keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
 
+    # ৫. অ্যান্ড্রয়েড SDK ও Gradle সেটআপ
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
@@ -41,9 +97,11 @@ jobs:
     - name: Make gradlew executable
       run: chmod +x gradlew
 
+    # ৬. নরমাল ও ক্লিন বিল্ড রান করা (কোনো টাস্ক স্কিপ না করে)
     - name: Build Debug APK
-      run: ./gradlew assembleDebug -x processDebugGoogleServices --no-daemon --no-configuration-cache
+      run: ./gradlew assembleDebug --no-daemon --no-configuration-cache
 
+    # ৭. তৈরি হওয়া APK ডাউনলোডের জন্য আপলোড করা
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
