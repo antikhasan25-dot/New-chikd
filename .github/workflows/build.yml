@@ -12,7 +12,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # ১. আনজিপ এবং ফাইল সাজানো
+    # ১. ফাইল সাজানো
     - name: Unzip and Move Files
       run: |
         unzip -o *.zip || true
@@ -23,19 +23,9 @@ jobs:
         touch .env
         touch .env.example
 
-    # ২. সহজ উপায়ে সঠিক প্যাকেজ নেম বের করে google-services.json জেনারেট
-    - name: Auto Generate google-services.json
+    # ২. সরাসরি সঠিক প্যাকেজ নেম বসিয়ে google-services.json জেনারেট করা
+    - name: Direct Generate google-services.json
       run: |
-        PKG=$(grep -o "applicationId.*" app/build.gradle app/build.gradle.kts 2>/dev/null | head -n 1 | sed 's/[^a-zA-Z0-9._]//g' | sed 's/applicationId//g')
-        if [ -z "$PKG" ]; then
-          PKG=$(grep -o "namespace.*" app/build.gradle app/build.gradle.kts 2>/dev/null | head -n 1 | sed 's/[^a-zA-Z0-9._]//g' | sed 's/namespace//g')
-        fi
-        if [ -z "$PKG" ]; then
-          PKG="com.aistudio.childguardian.cg"
-        fi
-
-        echo "Detected True Package Name: $PKG"
-
         mkdir -p app/
         cat << 'EOF' > app/google-services.json
         {
@@ -49,7 +39,7 @@ jobs:
               "client_info": {
                 "mobilesdk_app_id": "1:123456789012:android:1234567890123456",
                 "android_client_info": {
-                  "package_name": "PLACEHOLDER_PKG"
+                  "package_name": "com.aistudio.childguardian.cg"
                 }
               },
               "oauth_client": [],
@@ -69,8 +59,6 @@ jobs:
         }
         EOF
 
-        sed -i "s/PLACEHOLDER_PKG/$PKG/g" app/google-services.json
-
     # ৩. জাভা ২১ সেটআপ
     - name: Set up JDK 21
       uses: actions/setup-java@v4
@@ -78,7 +66,7 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
 
-    # ৪. সই (Signing) এর জন্য কাস্টম Keystore তৈরি
+    # ৪. সই করার জন্য কাস্টম Keystore তৈরি
     - name: Generate Debug Keystore
       run: |
         keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
@@ -93,7 +81,7 @@ jobs:
     - name: Make gradlew executable
       run: chmod +x gradlew
 
-    # ৬. নরমাল বিল্ড রান করা
+    # ৬. APK তৈরি করা
     - name: Build Debug APK
       run: ./gradlew assembleDebug --no-daemon --no-configuration-cache
 
